@@ -1,0 +1,39 @@
+# Arquivos temporários
+*.tmp
+*.temp
+*.log
+*.bak
+*.swp
+*~
+
+# Arquivos compilados
+*.class
+*.o
+*.obj
+*.exe
+*.out
+*.pyc
+
+# Pastas de compilação
+build/
+dist/
+target/
+out/
+
+# Configurações de IDE
+.idea/
+.vscode/
+*.iml
+
+# Arquivos com senhas e credenciais
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+credentials.json
+
+# Arquivos do sistema operacional
+.DS_Store
+Thumbs.db
