@@ -37,3 +37,9 @@ credentials.json
 # Arquivos do sistema operacional
 .DS_Store
 Thumbs.db
+
+# Arquvios
+**/bin/
+**/obj/
+**/node_modules/
+**/dist/
