@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "dgSpecHash": "kOXhXBbdhl0=",
+  "success": true,
+  "projectFilePath": "/home/francisco-toro-tonissi/Documents/RetroGames/RetroGames.WebApi.UnitTests/RetroGames.WebApi.UnitTests.csproj",
+  "expectedPackageFiles": [
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.applicationinsights/2.23.0/microsoft.applicationinsights.2.23.0.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.aspnetcore.openapi/10.0.14/microsoft.aspnetcore.openapi.10.0.14.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.bcl.asyncinterfaces/6.0.0/microsoft.bcl.asyncinterfaces.6.0.0.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.openapi/2.12.2/microsoft.openapi.2.12.2.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.testing.extensions.telemetry/2.5.1/microsoft.testing.extensions.telemetry.2.5.1.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.testing.extensions.trxreport.abstractions/2.5.1/microsoft.testing.extensions.trxreport.abstractions.2.5.1.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.testing.platform/2.5.1/microsoft.testing.platform.2.5.1.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.testing.platform.msbuild/2.5.1/microsoft.testing.platform.msbuild.2.5.1.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/microsoft.win32.registry/5.0.0/microsoft.win32.registry.5.0.0.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/system.security.accesscontrol/6.0.1/system.security.accesscontrol.6.0.1.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.analyzers/2.2.0/xunit.analyzers.2.2.0.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.v3.assert/4.0.2/xunit.v3.assert.4.0.2.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.v3.common/4.0.2/xunit.v3.common.4.0.2.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.v3.core.mtp-v2/4.0.2/xunit.v3.core.mtp-v2.4.0.2.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.v3.extensibility.core/4.0.2/xunit.v3.extensibility.core.4.0.2.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.v3.mtp-v2/4.0.2/xunit.v3.mtp-v2.4.0.2.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.v3.runner.common/4.0.2/xunit.v3.runner.common.4.0.2.nupkg.sha512",
+    "/home/francisco-toro-tonissi/.nuget/packages/xunit.v3.runner.inproc.console/4.0.2/xunit.v3.runner.inproc.console.4.0.2.nupkg.sha512"
+  ],
+  "logs": []
+}

@@ -1,0 +1,39 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "RetroGames.Repository/1.0.0": {
+        "dependencies": {
+          "RetroGames.Model": "1.0.0"
+        },
+        "runtime": {
+          "RetroGames.Repository.dll": {}
+        }
+      },
+      "RetroGames.Model/1.0.0": {
+        "runtime": {
+          "RetroGames.Model.dll": {
+            "assemblyVersion": "1.0.0.0",
+            "fileVersion": "1.0.0.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "RetroGames.Repository/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "RetroGames.Model/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    }
+  }
+}
