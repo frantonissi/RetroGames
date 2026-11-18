@@ -27,6 +27,8 @@ if (string.IsNullOrWhiteSpace(connectionString))
 // Registra as dependências
 builder.Services.AddRepositorios(connectionString);
 builder.Services.AddServicosDeNegocio();
+builder.Services.AddAutenticacao(builder.Environment.IsDevelopment());
+builder.Services.AddAuthorization();
 
 // Registra os controllers e o OpenAPI
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
@@ -77,6 +79,9 @@ if (app.Environment.IsDevelopment())
         options.SwaggerEndpoint("/openapi/v1.json", "RetroGames API v1");
     });
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 // Mapeia as rotas dos controllers
 app.MapControllers();
