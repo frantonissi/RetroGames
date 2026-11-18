@@ -1,4 +1,5 @@
 
+using RetroGames.Services;
 using RetroGames.WebApi.Configuration;
 using RetroGames.WebApi.Middlewares;
 using FluentValidation;
@@ -6,10 +7,13 @@ using RetroGames.WebApi.ActionFilters;
 using RetroGames.WebApi.ApiModels; // Ajuste ao namespace do ResponseCodes
 using Microsoft.AspNetCore.Mvc;
 
-// Carrega as variáveis do arquivo .env
-DotNetEnv.Env.TraversePath().Load();
-
 var builder = WebApplication.CreateBuilder(args);
+
+if (builder.Environment.IsDevelopment())
+{
+    DotNetEnv.Env.NoClobber().TraversePath().Load();
+    builder.Configuration.AddEnvironmentVariables();
+}
 
 // Lê a connection string
 var connectionString = builder.Configuration.GetConnectionString("Default");
@@ -52,6 +56,14 @@ builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
 builder.Services.AddProblemDetails();
 
 var app = builder.Build();
+
+await using (var escopo = app.Services.CreateAsyncScope())
+{
+    var autenticacao = escopo.ServiceProvider.GetRequiredService<IAutenticacaoService>();
+    await autenticacao.GarantirAdministradorInicialAsync(
+        app.Configuration["AdminInicial:Email"],
+        app.Configuration["AdminInicial:Senha"]);
+}
 
 app.UseExceptionHandler();
 
