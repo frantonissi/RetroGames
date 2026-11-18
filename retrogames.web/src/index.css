@@ -24,3 +24,18 @@ body {
   --bs-btn-active-border-color: #3d2667;
   --bs-btn-focus-shadow-rgb: 81, 53, 131;
 }
+
+.cartao-jogo {
+  border-top: 3px solid #bda4f6;
+}
+
+.plataforma-jogo {
+  color: #513583;
+}
+
+.pagination {
+  --bs-pagination-color: #513583;
+  --bs-pagination-hover-color: #3d2667;
+  --bs-pagination-active-bg: #513583;
+  --bs-pagination-active-border-color: #513583;
+}
