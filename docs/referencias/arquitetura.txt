@@ -1,0 +1,598 @@
+ESPECIFICAÇÃO TÉCNICA
+
+RetroGames — Arquitetura e Stack
+Versão 1.0 · Escopo: Módulo de Catálogo e Administração
+
+
+
+
+1. Visão geral
+
+1.1 Objetivo
+Este documento especifica a arquitetura, a stack tecnológica, o modelo de dados, os contratos da API e os
+requisitos de segurança do sistema RetroGames, uma loja web de jogos retrô usados. O escopo desta versão
+é o Módulo de Catálogo e Administração.
+
+1.2 Funcionalidades
+A tabela a seguir delimita as funcionalidades contempladas nesta versão.
+
+ Funcionalidade
+ Catálogo público de jogos, com busca textual, filtros por plataforma e gênero e paginação
+ Consulta de detalhe de jogo
+ Manutenção de plataformas (inclusão, consulta, alteração e exclusão)
+ Manutenção de jogos, com associação a gêneros (relação N:N) e exclusão lógica
+ Consulta de gêneros e de condições de jogo (tabelas de domínio)
+ Autenticação e autorização do perfil Administrador
+
+
+
+1.3 Visão de componentes
+O sistema é composto por três componentes executados localmente: uma Single Page Application (SPA) em
+React, uma API REST em ASP.NET Core e um banco de dados relacional MySQL. A SPA comunica-se
+exclusivamente com a API por HTTP/JSON. A API acessa o banco de dados por meio do ADO.NET, com o
+provedor MySqlConnector.
+Em ambiente de desenvolvimento, o servidor do Vite (porta 5173) encaminha as requisições com prefixo
+/api para a API (porta 5080). Front-end e API compartilham a mesma origem, o que dispensa a configuração
+de CORS e permite o uso de cookies SameSite=Strict.
+2. Stack tecnológica
+
+As versões abaixo são as de referência do projeto.
+
+ Camada                Tecnologia                     Versão    Finalidade
+ Plataforma            .NET SDK                       10        Runtime e compilador C#
+                       ASP.NET Core Web API                     Roteamento HTTP, injeção de dependência,
+ API                                                  10
+                       (controllers)                            autenticação e autorização
+                       ADO.NET                                  Abstrações de conexão, comando, leitura e
+ Acesso a dados                                       nativo
+                       (System.Data.Common)                     transação
+ Provedor ADO.NET      MySqlConnector (NuGet)         2.6.2     Implementação do ADO.NET para o MySQL
+ Banco de dados        MySQL                          8         Persistência relacional
+ Validação             FluentValidation               12.1.0    Validação de formato dos modelos de entrada
+ Documentação da                                                Especificação e teste dos endpoints (somente
+                       OpenAPI + Swagger UI           10.x
+ API                                                            em desenvolvimento)
+ Criptografia de       PasswordHasher (ASP.NET
+                                                      nativo    Hash de senha com salt (PBKDF2)
+ senha                 Core Identity)
+                                                      3.0.0 /
+ Testes                xUnit v3 + Moq                           Testes unitários com objetos simulados (mocks)
+                                                      4.20.72
+ Front-end             React + Vite                   19 / 8    SPA e servidor de desenvolvimento
+ Interface             Bootstrap                      5         Layout responsivo e componentes visuais
+ Roteamento no
+                       React Router                   7         Navegação entre telas
+ cliente
+ Cliente HTTP          Axios                          1.x       Requisições à API
+                                                                Versionamento e ambiente de
+ Ferramentas           Git, VS Code, Node.js 22 LTS   —
+                                                                desenvolvimento
+3. Arquitetura
+
+3.1 Estilo arquitetural
+O back-end adota arquitetura em camadas. Cada camada depende apenas da camada imediatamente
+inferior:
+Controller → Service → Repository → banco de dados.
+É vedado ao controller acessar o repositório diretamente. Somente a camada Repository contém instruções
+SQL. A camada Service não depende de tipos HTTP (HttpContext, códigos de status). O controle de
+transações é responsabilidade exclusiva da camada Service. Há um Repository por tabela, com o nome dela
+sem o prefixo tb_ (tb_condicao_jogo → CondicaoJogoRepository); cada um retorna entidades de uma única
+tabela, sem junções nem subconsultas em outras tabelas; filtros, ordenação e paginação são aplicados no
+SQL. A composição de dados de várias tabelas é feita no Service, com LINQ, e resulta em um ServiceModel.
+Filtros que dependem de outra tabela, como o filtro por gênero, também são resolvidos no Service: a seleção
+é feita com LINQ e o resultado segue para o SQL como lista de identificadores, o que mantém a contagem e a
+paginação no banco.
+
+3.2 Projetos da solução
+A solução RetroGames.sln é composta por seis projetos .NET e um projeto front-end.
+ Projeto                            Responsabilidade                                        Dependências
+                                    Entidades de domínio, constantes e tipos
+ RetroGames.Model                                                                           —
+                                    compartilhados
+ RetroGames.Repository              Repositórios ADO.NET e agregador IRepositorySet         Model
+                                    Regras de negócio, ServiceModels, catálogo de erros     Model, Repository,
+ RetroGames.Services
+                                    de negócio e BusinessRuleException                      WebApi.ApiModels
+ RetroGames.WebApi.ApiModel         Modelos de entrada e saída da API, envelope de
+                                                                                            —
+ s                                  resposta e ResponseCodes
+                                    Controllers, validators, mappers, configuração e
+ RetroGames.WebApi                                                                          Todos os anteriores
+                                    tratamento global de exceções
+ RetroGames.WebApi.UnitTest
+                                    Testes unitários                                        WebApi, Services
+ s
+ retrogames.web                     SPA React                                               API, via HTTP
+
+
+
+3.3 Responsabilidades por camada
+Cada componente do back-end possui responsabilidade única, conforme a tabela.
+ Componente             Responsabilidade                                        Restrição
+                        Receber a requisição, converter ApiModel em
+                                                                                Não contém regra de negócio nem
+ Controller             entidade (mapper), acionar o service e devolver o
+                                                                                SQL
+                        envelope com o status HTTP
+                        Validar formato dos dados de entrada:
+ Validator                                                                      Não acessa o banco de dados
+                        obrigatoriedade, tamanho e faixa de valores
+                        Aplicar as regras de negócio, controlar transações
+                        (TransactionScope), compor dados de várias tabelas      Não depende de HTTP nem
+ Service
+                        com LINQ em ServiceModels e lançar                      contém SQL
+                        BusinessRuleException quando uma regra é violada
+                        Abrir conexão, executar SQL parametrizado e mapear
+                        resultados, participando da transação aberta pelo
+                        Service; cada consulta lê uma única tabela, com         Não decide regras de negócio nem
+ Repository
+                        filtros, ordenação e paginação no SQL; converte a       controla transações
+                        violação de UNIQUE (erro 1062) em
+                        RegistroDuplicadoException
+                        Converter BusinessRuleException no status HTTP do
+ GlobalExceptionH
+                        erro do catálogo (400, 404 ou 409) e outras exceções    —
+ andler
+                        em 500, sempre no formato do envelope
+
+
+
+3.4 Fluxo de processamento de uma requisição
+Exemplo: inclusão de plataforma (POST /api/Plataforma).
+    1.​ Na tela de plataformas, o formulário chama plataformaApi.inserir, em servicos.js, que
+        envia POST /api/Plataforma pelo Axios.
+    2.​ A requisição chega com corpo JSON e com o cookie de sessão, que o navegador envia sozinho.
+    3.​ O ASP.NET Core confere a sessão e o perfil Administrador. Em seguida, o FluentValidation valida o
+        InserirPlataformaApiModel; em caso de erro, a API responde HTTP 400 com responseCode 3.
+    4.​ O PlataformaController converte o ApiModel na entidade Plataforma e invoca
+        IPlataformaService.InserirAsync.
+    5.​ O PlataformaService verifica a unicidade do nome.
+            a.​ Em caso de duplicidade, lança BusinessRuleException, convertida em HTTP 409
+                 (responseCode 101).
+    6.​ O IPlataformaRepository.InserirAsync executa INSERT parametrizado e retorna o
+        identificador gerado (LastInsertedId).
+    7.​ Se outra requisição gravar o mesmo nome entre a verificação e o INSERT, o banco recusa a gravação
+        (erro 1062); o Repository lança RegistroDuplicadoException e o Service a converte no mesmo
+        erro de negócio (HTTP 409, responseCode 101).
+    8.​ O controller responde HTTP 201 com o recurso criado no envelope.
+    9.​ No front-end, plataformaApi.inserir devolve o conteúdo de data; em caso de erro, a tela
+        exibe errorMessage.
+
+3.5 Decisões de arquitetura
+A tabela registra o motivo de cada decisão e indica se ela é uma boa prática geral ou uma escolha didática
+deste projeto. As escolhas didáticas simplificam o aprendizado; a última coluna indica o que é comum em
+sistemas profissionais ou a limitação da escolha.
+
+ Decisão                   Motivo                                      Tipo          Alternativa ou limitação
+                           Mantém a camada HTTP enxuta e
+ Controller sem SQL e
+                           permite testar o controller com o service   Boa prática   —
+ sem regra de negócio
+                           simulado.
+                           Concentra as regras em um único lugar,
+Regras de negócio no
+                           independente de HTTP e do banco, e        Boa prática   —
+Service
+                           testável com mocks.
+                           Impede SQL injection e isola o acesso a                 ORM (Entity Framework) ou
+SQL parametrizado
+                           dados: uma mudança no banco afeta         Boa prática   micro-ORM (Dapper), fora
+somente no Repository
+                           uma única camada.                                       do escopo do curso.
+                           O contrato da API não muda quando a
+ApiModels separados
+                           tabela muda, e campos internos, como      Boa prática   —
+das entidades
+                           SenhaHash, não são expostos.
+                           Só o Service conhece a operação
+Transação aberta pelo                                                              Unit of Work com transação
+                           completa; os repositórios participam da   Boa prática
+Service                                                                            explícita na conexão.
+                           transação sem controlá-la.
+                                                                                   No mercado: JOIN no SQL,
+                                                                                   views ou ORM. Limitações:
+Uma tabela por consulta,   Cada classe espelha uma tabela, e a
+                                                                     Escolha       mais consultas por operação
+com composição em          combinação dos dados fica visível no
+                                                                     didática      (em número fixo) e
+LINQ                       código do Service.
+                                                                                   ordenação por coluna de
+                                                                                   outra tabela fora do SQL.
+                                                                                   No mercado, CHECK e
+Nenhuma regra no banco
+                           As regras ficam em um só lugar, onde      Escolha       restrições no banco são
+(sem CHECK, trigger ou
+                           são testadas e explicadas.                didática      comuns como segunda
+function)
+                                                                                   proteção.
+                           O Service devolve a mensagem de
+UNIQUE no banco e
+                           negócio; o UNIQUE garante a regra         Boa prática   —
+conferência no Service
+                           quando duas requisições chegam juntas.
+4. Modelo de dados
+
+4.1 Convenção de nomenclatura
+Tabelas e colunas utilizam nomes em português, em minúsculas, com prefixo que identifica o tipo do
+elemento.
+
+ Prefixo             Significado                                            Exemplo
+ tb_                 Tabela                                                 tb_jogo
+                     Chave primária gerada pelo banco
+ co_seq_                                                                    co_seq_jogo
+                     (AUTO_INCREMENT)
+                     Chave fixa de tabela de domínio ou chave
+ co_                                                                        co_condicao_jogo
+                     estrangeira
+ no_ / ds_           Nome / descrição                                       no_jogo, ds_email
+ nu_ / qt_ /         Número / quantidade / valor monetário                  nu_ano_lancamento, qt_estoque,
+ vl_                 DECIMAL(10,2)                                          vl_preco
+ dt_                 Data e hora em UTC                                     dt_cadastro
+ st_                 Indicador booleano de situação                         st_ativo
+
+
+
+4.2 Tabelas do módulo
+O módulo utiliza as tabelas abaixo.
+
+ Tabela                 Tipo                Descrição                                   Relacionamentos
+ tb_condicao_jog
+                        Domínio             Condição de conservação do jogo             1:N com tb_jogo
+ o
+ tb_perfil              Domínio             Perfis de acesso (Administrador, Cliente)   1:N com tb_usuario
+ tb_plataforma          Cadastro            Console ou plataforma do jogo               1:N com tb_jogo
+                        Cadastro
+ tb_genero                                  Gênero do jogo                              N:N com tb_jogo
+                        (somente leitura)
+                                            Jogo à venda: nome, descrição, ano,         N:1 com plataforma e
+ tb_jogo                Principal
+                                            preço, estoque e situação                   condição
+                                            Associação entre jogo e gênero (chave
+ tb_jogo_genero         Associativa                                                     N:1 com tb_jogo e tb_genero
+                                            primária composta)
+                                            Usuário do sistema, com e-mail único e
+ tb_usuario             Cadastro                                                        N:1 com tb_perfil
+                                            hash de senha
+Dicionário de dados: as colunas de cada tabela estão definidas abaixo. Somente ds_jogo
+aceita NULL; as demais colunas são obrigatórias.
+ Tabela                       Colunas
+ tb_condicao_jogo             co_condicao_jogo, ds_condicao_jogo
+ tb_perfil                    co_perfil, ds_perfil
+ tb_plataforma           co_seq_plataforma, no_plataforma, no_fabricante, nu_ano_lancamento
+ tb_genero               co_seq_genero, no_genero
+                         co_seq_jogo, no_jogo, ds_jogo, nu_ano_lancamento, vl_preco,
+ tb_jogo
+                         qt_estoque, st_ativo, dt_cadastro, co_plataforma, co_condicao_jogo
+ tb_jogo_genero          co_jogo, co_genero
+                         co_seq_usuario, no_usuario, ds_email, ds_senha_hash, st_ativo,
+ tb_usuario
+                         dt_cadastro, co_perfil
+
+
+
+4.3 Restrições de integridade
+   ●​ O banco de dados é responsável exclusivamente pela integridade estrutural: chaves primárias, chaves
+      estrangeiras, tipos de dados e obrigatoriedade (NOT NULL) e unicidade (UNIQUE).
+   ●​ É vedado o uso de triggers, functions e ações referenciais (ON DELETE CASCADE, ON DELETE SET
+      NULL). As chaves estrangeiras mantêm o comportamento padrão do MySQL.
+   ●​ Toda regra de negócio (unicidade, faixas de valores, exclusão lógica e manutenção de registros
+      dependentes) é implementada na camada Service. Quando uma operação exige mais de um
+      comando, como a gravação de um jogo e de suas associações em tb_jogo_genero, o Service abre
+      a transação com TransactionScope e a conclui com Complete(). O Repository apenas executa
+      os comandos SQL e é vedado a ele abrir, confirmar ou desfazer transações. A unicidade é conferida
+      pelo Service e garantida também pelo UNIQUE do banco: se duas gravações simultâneas passarem
+      pela conferência, o banco recusa a segunda (erro 1062), o Repository lança
+      RegistroDuplicadoException e o Service a converte no erro de negócio correspondente.
+5. Contrato da API
+
+5.1 Convenções
+As rotas seguem o padrão api/[controller]. Requisições e respostas utilizam JSON, com propriedades
+em camelCase. Identificadores de recurso são passados na rota (por exemplo, /api/Jogo/{id}) e filtros, na
+query string. Os códigos de status HTTP utilizados são:
+
+ Status                       Significado                       Uso no sistema
+ 200 OK                       Sucesso                           Consultas e alterações
+ 201 Created                  Recurso criado                    Inclusões (POST)
+                                                                Falha de validação de formato ou regra de negócio
+ 400 Bad Request              Requisição inválida
+                                                                violada
+ 401 Unauthorized             Não autenticado                   Ausência de sessão ou credenciais inválidas
+ 403 Forbidden                Sem permissão                     Usuário autenticado sem o perfil exigido
+ 404 Not Found                Recurso inexistente               Registro não encontrado ou rota inexistente
+                                                                Nome duplicado ou exclusão de registro com
+ 409 Conflict                 Conflito com dados gravados
+                                                                dependentes
+ 500 Internal Server Error    Erro inesperado                   Exceção não tratada
+
+
+
+5.2 Endpoints
+Níveis de acesso: Público (sem autenticação), Autenticado (qualquer usuário com sessão ativa) e
+Administrador (sessão ativa com perfil Administrador). A API é segura por padrão: toda rota exige usuário
+autenticado, e só as rotas Público são liberadas explicitamente com [AllowAnonymous] (RS03).
+ Método         Rota                                  Acesso              Descrição
+ POST           /api/Autenticacao/login               Público             Autentica o usuário e cria a sessão
+ POST           /api/Autenticacao/logout              Autenticado         Encerra a sessão
+ GET            /api/Autenticacao/eu                  Autenticado         Retorna os dados do usuário autenticado
+ GET            /api/Plataforma                       Público             Lista as plataformas
+ GET            /api/Plataforma/{id}                  Público             Consulta uma plataforma
+ POST           /api/Plataforma                       Administrador       Inclui uma plataforma
+ PUT            /api/Plataforma/{id}                  Administrador       Altera uma plataforma
+ DELETE         /api/Plataforma/{id}                  Administrador       Exclui uma plataforma sem jogos vinculados
+ GET            /api/Genero                           Público             Lista os gêneros
+ GET            /api/CondicaoJogo                     Público             Lista as condições de jogo
+                                                                          Lista paginada de jogos. Parâmetros: busca,
+                                                                          idPlataforma, idGenero, pagina,
+ GET            /api/Jogo                             Público
+                                                                          tamanhoPagina, incluirInativos (somente
+                                                                          Administrador)
+ GET         /api/Jogo/{id}                        Público          Consulta um jogo, com seus gêneros
+ POST        /api/Jogo                             Administrador    Inclui um jogo
+ PUT         /api/Jogo/{id}                        Administrador    Altera um jogo
+ DELETE      /api/Jogo/{id}                        Administrador    Desativa um jogo (exclusão lógica)
+
+
+
+5.3 Envelope de resposta
+Todas as respostas, de sucesso ou de erro, utilizam o envelope abaixo. Em falhas de validação (responseCode
+3), data contém os erros indexados por campo. Os códigos são declarados em dois catálogos, sem repetição:
+ResponseCodes (projeto ApiModels), de 0 a 99, no formato (Code, DefaultMessage), com os códigos que
+nascem na própria API; e BusinessErrors (projeto Services), a partir de 100, no formato (Code,
+DefaultMessage, Status), com os erros de negócio e o status HTTP de cada um, indicado na tabela ao lado do
+código. O envelope devolve o código do erro de negócio lançado pelo Service. Em cada catálogo, um novo
+código recebe o próximo número livre. Os códigos do Módulo de Compras serão definidos na tarefa
+correspondente. A propriedade data é omitida nas respostas de erro, exceto na falha de validação. A seção
+5.4 apresenta exemplos.
+
+{ "responseCode": 0, "data": { ... }, "errorMessage": null }
+
+
+
+Código           Constante                              Mensagem padrão
+0                SUCESSO                                —
+                                                        Exceção não tratada; mensagem genérica definida no
+1                ERRO
+                                                        GlobalExceptionHandler
+2                MODEL_NULL                             O modelo veio nulo.
+3                MODEL_STATE_INVALIDO                   Há um erro com o modelo enviado.
+4                NAO_AUTENTICADO                        Faça login para continuar.
+5                ACESSO_NEGADO                          Você não tem permissão para esta operação.
+6                CREDENCIAIS_INVALIDAS                  E-mail ou senha inválidos.
+100 · 404        PLATAFORMA_NAO_ENCONTRADA              Plataforma não encontrada.
+101 · 409        PLATAFORMA_NOME_DUPLICADO              Já existe uma plataforma com este nome.
+102 · 409        PLATAFORMA_POSSUI_JOGOS                Não é possível excluir: existem jogos desta plataforma.
+103 · 404        JOGO_NAO_ENCONTRADO                    Jogo não encontrado.
+104 · 404        CONDICAO_NAO_ENCONTRADA                Condição de jogo não encontrada.
+105 · 404        GENERO_NAO_ENCONTRADO                  Gênero não encontrado.
+
+5.4 Exemplos de requisição e resposta
+Inclusão de plataforma (POST /api/Plataforma). As mensagens são as definidas nos validators, em
+ResponseCodes e em BusinessErrors.
+Requisição
+
+{ "nome": "Super Nintendo", "fabricante": "Nintendo", "anoLancamento": 1990 }
+
+HTTP 201: inclusão realizada
+
+{ "responseCode": 0, "data": { "id": 7, "nome": "Super Nintendo", "fabricante":
+"Nintendo", "anoLancamento": 1990 }, "errorMessage": null }
+
+HTTP 400: falha de validação (nome vazio e ano fora da faixa)
+
+{ "responseCode": 3, "data": { "nome": ["Informe o nome."], "anoLancamento": ["Ano de
+lançamento inválido."] }, "errorMessage": "Há um erro com o modelo enviado." }
+
+HTTP 409: violação da RN01 (nome já cadastrado)
+
+{ "responseCode": 101, "errorMessage": "Já existe uma plataforma com este nome." }
+6. Requisitos de segurança
+
+Os requisitos abaixo são obrigatórios em todas as funcionalidades do módulo.
+
+ ID        Requisito
+           A sessão deve ser mantida em cookie HttpOnly e SameSite=Strict, com expiração deslizante de 2 horas.
+ RS01
+           Nenhum token de sessão pode ser armazenado em localStorage ou sessionStorage.
+           A proteção contra CSRF (falsificação de requisição entre sites) é feita pelo cookie SameSite=Strict da RS01:
+ RS02      o navegador não envia a sessão em requisições iniciadas por outros sites. Por simplicidade, o projeto não
+           usa token antiforgery, que em produção costuma ser somado como segunda barreira.
+           A API deve ser segura por padrão: uma política global (FallbackPolicy) exige usuário autenticado em toda
+           rota, e somente as rotas de acesso Público (5.2) são liberadas, de forma explícita, com [AllowAnonymous].
+ RS03
+           Endpoints de manutenção devem exigir a política de autorização SomenteAdministrador. A proteção de
+           rotas no front-end é apenas de usabilidade; o controle efetivo é feito pela API (401/403).
+           Senhas devem ser armazenadas exclusivamente como hash gerado pelo PasswordHasher. É vedado
+ RS04
+           registrar senhas em log.
+           Em desenvolvimento, a cadeia de conexão e as credenciais do administrador inicial ficam no arquivo .env,
+           na raiz do repositório, listado no .gitignore e carregado pela API com o pacote DotNetEnv; o repositório
+ RS05      versiona apenas o modelo .env.example, sem senhas. Os demais arquivos appsettings são versionados e
+           não contêm senhas. Em produção, esses valores vêm de variáveis de ambiente. É vedado versionar
+           credenciais.
+           Todo valor recebido do cliente deve ser enviado ao banco como parâmetro de comando (@parametro). É
+ RS06
+           vedada a concatenação de valores em instruções SQL.
+7. Regras de negócio
+
+Regras de negócio são implementadas na camada Service, exceto quando indicado. A violação de uma regra
+resulta em BusinessRuleException com o erro correspondente de BusinessErrors. Cada erro do catálogo traz o
+seu status HTTP: 400 para regra violada, 404 quando o registro não existe e 409 quando a operação conflita
+com dados já gravados.
+
+ ID        Regra                                                                                  Implementação
+           Unicidade de plataforma. Não pode haver duas plataformas com o mesmo nome.
+ RN01                                                                                             PlataformaService
+           Violação: HTTP 409, código 101.
+           Integridade de plataforma. É vedada a exclusão de plataforma com jogos
+ RN02                                                                                             PlataformaService
+           vinculados. Violação: HTTP 409, código 102.
+           Exclusão lógica de jogos. A exclusão de um jogo deve atribuir st_ativo = 0,            JogoService e
+ RN03
+           preservando o registro e seus relacionamentos.                                         JogoRepository
+           Visibilidade do catálogo. A consulta pública retorna apenas jogos ativos. Jogos
+ RN04      inativos são listados somente para o Administrador, mediante o parâmetro               JogoService
+           incluirInativos.
+           Referências válidas. Todo jogo deve referenciar plataforma, condição e ao menos        JogoValidator e
+ RN05
+           um gênero existentes. Violação: HTTP 404, códigos 100, 104 e 105.                      JogoService
+           Valores de jogo. O preço deve ser maior que zero e o estoque, maior ou igual a         JogoValidator e
+ RN06
+           zero. O ano de lançamento deve estar entre 1970 e 2100.                                JogoService
+
+7.1 Rastreabilidade
+A tabela relaciona cada funcionalidade da seção 1.2 aos endpoints, às regras, às classes que a implementam e
+aos testes unitários que a verificam. O traço indica que ainda não há teste específico.
+
+ Funcionalidade       Endpoints                 Regras         Classes principais             Testes
+ Catálogo público                                              JogoController, JogoService,
+                      GET /api/Jogo             RN04                                          JogoServiceTests
+ de jogos                                                      JogoRepository
+ Detalhe de jogo      GET /api/Jogo/{id}        RN04           JogoController, JogoService    —
+                                                                                              PlataformaControllerTe
+                                                               PlataformaController,          sts,
+                      GET, POST, PUT e
+ Manutenção de                                  RN01,          PlataformaService,             PlataformaServiceTests
+                      DELETE
+ plataformas                                    RN02           PlataformaRepository e         ,
+                      /api/Plataforma
+                                                               validators de plataforma       PlataformaValidatorsTe
+                                                                                              sts
+                                                               JogoController, JogoService,
+                                                RN03,
+ Manutenção de        POST, PUT e DELETE                       JogoRepository,
+                                                RN05,                                         JogoValidatorsTests
+ jogos                /api/Jogo                                JogoGeneroRepository e
+                                                RN06
+                                                               validators de jogo
+ Gêneros e            GET /api/Genero, GET                     GeneroController,
+                                                —                                             —
+ condições de jogo    /api/CondicaoJogo                        CondicaoJogoController
+                                                               AutenticacaoController,
+ Autenticação e       /api/Autenticacao         RS01 a                                        AutenticacaoValidators
+                                                               AutenticacaoService,
+ autorização          (login, logout, eu)       RS06                                          Tests
+                                                               UsuarioRepository
+            Envelope   GlobalExceptionHandler,   GlobalExceptionHandle
+Todas   —
+            (5.3)      FluentValidationFilter    rTests
+8. Front-end
+
+O front-end é uma SPA em React 19, construída com Vite e estilizada com Bootstrap 5. Cada tela é
+implementada em um componente de página próprio, sem componentes genéricos de tabela ou formulário.
+
+8.1 Inicialização e rotas
+Arquivos localizados na raiz de src/.
+
+ Arquivo                         Responsabilidade
+                                 Ponto de entrada. Importa o CSS e o JavaScript do Bootstrap e monta a árvore
+ main.jsx
+                                 BrowserRouter → AutenticacaoProvider → App
+                                 Declaração das rotas (React Router), agrupadas em públicas e restritas ao
+ App.jsx
+                                 Administrador
+ index.css                       Ajustes visuais complementares ao Bootstrap
+ lib/formato.js                  Funções de formatação: formatarPreco (moeda BRL, pt-BR) e formatarDataHora
+
+
+
+8.2 Camada de acesso à API (api/)
+Os componentes não utilizam o Axios diretamente. Toda chamada à API é feita por meio de servicos.js.
+
+ Arquivo                         Responsabilidade
+                                 Instância do Axios com baseURL /api e envio de cookies. Interceptor de resposta:
+ api.js
+                                 em HTTP 401, emite o evento sessao:expirada
+                                 Uma função por endpoint, agrupadas em autenticacaoApi, plataformaApi,
+ servicos.js                     generoApi, condicaoJogoApi e jogoApi. Cada função retorna o campo data do
+                                 envelope
+                                 obterMensagemErro (extrai errorMessage) e obterErrosDosCampos (extrai os erros
+ erros.js
+                                 por campo quando responseCode = 3)
+
+
+
+8.3 Estado global (contexts/ e hooks/)
+O estado de autenticação é compartilhado por meio da Context API do React.
+
+ Arquivo                         Estado mantido                                Interface exposta
+                                 Usuário autenticado, obtido em GET
+                                                                               usuario, carregando,
+ AutenticacaoProvider.js         /api/Autenticacao/eu na inicialização. O
+                                                                               estaAutenticado, ehAdministrador,
+ x                               estado é limpo ao receber o evento
+                                                                               entrar, sair
+                                 sessao:expirada
+ autenticacaoContext.js          Contexto criado com createContext             —
+                                 Hook de acesso ao contexto de                 Utilizado por páginas e
+ useAutenticacao.js
+                                 autenticação                                  componentes
+8.4 Componentes reutilizáveis (components/)
+Componentes de interface utilizados por mais de uma página.
+
+ Componente            Props                            Responsabilidade
+                                                        Barra de navegação (Catálogo, menu Administração,
+ Layout                —                                Entrar e Sair) e <Outlet /> para renderização da página
+                                                        corrente
+                                                        Cartão do catálogo: plataforma, nome, ano, condição,
+ CardJogo              jogo                             gêneros, preço, indicador de esgotado e link para o
+                                                        detalhe
+                       pagina, totalPaginas,            Controles de paginação; não é renderizado quando há
+ Paginacao
+                       aoMudar                          uma única página
+                       Carregando (texto),
+                       MensagemErro (mensagem,
+                                                        Componentes de estado de carregamento, de erro com
+ MensagensEstado       aoTentarNovamente),
+                                                        nova tentativa e de lista vazia
+                       EstadoVazio (titulo,
+                       children)
+                                                        Restringe rotas no cliente. Sem sessão, redireciona para
+ RotaProtegida         somenteAdministrador             /login?voltarPara=…; sem o perfil exigido, redireciona
+                                                        para o catálogo
+
+
+
+8.5 Páginas (pages/)
+Cada página corresponde a uma rota da aplicação.
+
+ Página            Rota                       Acesso             Responsabilidade
+                                                                 Lista paginada de jogos com busca e filtros por
+ Catalogo          /                          Público
+                                                                 plataforma e gênero, refletidos na query string
+ DetalheJogo       /jogos/:id                 Público            Exibe os dados completos do jogo
+                                                                 Autenticação por e-mail e senha, com retorno à
+ Login             /login                     Público
+                                                                 rota de origem
+                                                                 Lista paginada com busca, incluindo inativos;
+ Jogos             /admin/jogos               Administrador
+                                                                 ações de edição e desativação
+                   /admin/jogos/novo e                           Inclusão e alteração de jogo: plataforma,
+ FormularioJog
+                   /admin/jogos/:id/edi       Administrador      condição, gêneros (N:N), preço e estoque, com
+ o
+                   tar                                           erros por campo
+                                                                 Manutenção de plataformas: listagem, inclusão,
+ Plataforma        /admin/plataformas         Administrador
+                                                                 alteração e exclusão
+ NaoEncontrada     *                          Público            Resposta para rotas inexistentes (404)
+9. Testes
+
+  ●​ Tipo: testes unitários com xUnit v3 e Moq. Testes de integração não fazem parte do escopo.
+  ●​ Alvos: controllers, com o service substituído por mock; services, com o repositório substituído por
+     mock; GlobalExceptionHandler. Também são testados os validators, com casos válidos e
+     inválidos. A seção 7.1 relaciona os testes às funcionalidades e às regras.
+  ●​ Padrão: Arrange, Act, Assert (AAA), com um único comportamento verificado por teste.
+  ●​ Execução: dotnet test na raiz da solução. Todos os testes devem passar antes de cada commit na
+     branch principal.
+10. Execução local
+
+Pré-requisitos: .NET SDK 10, Node.js 22 LTS e MySQL 8 em execução.
+    1.​ Criar o banco de dados e deixar executando.
+    2.​ Copiar .env.example para .env, na raiz do repositório, e preencher ConnectionStrings__Default,
+        AdminInicial__Email e AdminInicial__Senha.
+    3.​ Executar dotnet run no projeto RetroGames.WebApi. A API responde na porta 5080 e o Swagger
+        UI fica disponível em /swagger.
+    4.​ Executar npm install.
+    5.​ Execute npm run dev no diretório retrogames.web. A aplicação responde na porta 5173.
+    6.​ Executar dotnet test na raiz da solução para validar os testes unitários.
+

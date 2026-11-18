@@ -1,0 +1,238 @@
+   RETROGAMES · ROTEIRO DO ESTUDANTE
+
+   Aula 6 — Autenticação e administração
+
+
+ Nesta aula
+
+Objetivo: só o administrador pode alterar o catálogo. Você cria os usuários com senha guardada como hash, o
+login com sessão em cookie e a proteção das rotas de gravação. Visitantes continuam lendo o catálogo, mas só
+veem jogos ativos.
+
+
+Antes de começar, você precisa ter:
+  ●​ A Aula 5 concluída: as rotas de leitura e de gravação funcionam no Swagger.
+
+
+O que você vai criar:
+
+ Etapa                      O que criar                                Para que serve
+
+ 1. Usuários e senhas       UsuarioRepository,                         Guardar usuários com a senha
+                            AutenticacaoService e o                    em hash e conferir o login
+                            administrador inicial
+
+ 2. Sessão e login          Cookie de sessão, ResponseCodes 4 a 6      Entrar, sair e saber quem está
+                            e o AutenticacaoController                 logado
+
+ 3. Proteção da             Política padrão, SomenteAdministrador e    Gravação só para o
+ administração              IUsuarioAtualService                       administrador; inativos só para
+                                                                       ele (RN04)
+
+ 4. Todas as respostas de   Nada novo: um roteiro de testes no         Conferir cada 401, 400 e 200
+ acesso                     Swagger                                    do acesso
+ Etapa 1 de 4 · Usuários e senhas
+
+ A senha nunca é guardada. O banco guarda um hash: um resumo irreversível, gerado pelo PasswordHasher
+ do ASP.NET Core. No login, o Service gera o hash da senha digitada e compara com o guardado. O primeiro
+ administrador nasce na inicialização da API, com e-mail e senha lidos do .env.
+
+O que criar
+ Classe ou arquivo                    O que faz
+
+ IUsuarioRepository e                 Buscar por e-mail, buscar por id, existe administrador e inserir.
+ UsuarioRepository                    O RepositorySet ganha Usuario.
+
+ Perfis (Model, pasta                 Os nomes Administrador e Cliente, usados no login e
+ Constantes)                          nas políticas.
+
+ IAutenticacaoService e               AutenticarAsync devolve o usuário, ou nulo se o e-mail
+ AutenticacaoService                  não existe, a senha não confere ou o usuário está inativo.
+                                      GarantirAdministradorInicialAsync cria o
+                                      administrador se não houver nenhum.
+
+ .env e .env.example                  Ganham AdminInicial__Email e
+                                      AdminInicial__Senha. No .env.example, só
+                                      SUA_SENHA.
+
+
+
+
+                                                                            📖
+Passos
+  1.​ Crie o Repository de usuários, testando cada SQL no Workbench antes.
+
+                                                                      📖                   📖
+                                                                             Espec. 4.2 e 6, RS06
+  2.​ Crie o Service e registre IPasswordHasher<Usuario> na injeção de dependência.
+  3.​ Acrescente o administrador inicial ao .env e ao .env.example.     Espec. 6, RS05
+                                                                                           Espec. 6, RS04
+
+  4.​ No Program.cs, depois do Build(), chame GarantirAdministradorInicialAsync com os dados
+      lidos da configuração.
+  5.​ Suba a API e faça um commit.
+
+
+ ✔ Confira
+ ☐ tb_usuario tem o administrador, e ds_senha_hash guarda um texto longo, nunca a senha.
+ ☐ Subir a API de novo não cria um segundo administrador.
+ ☐ E-mail inexistente, senha errada e usuário inativo dão o mesmo resultado: nulo.
+ ☐ git status não lista o .env, e nenhuma senha aparece no log.
+ Etapa 2 de 4 · Sessão e login
+
+ Depois do login, a API devolve um cookie de sessão. Ele leva as claims do usuário (id, nome, e-mail e perfil),
+ criptografadas, e o navegador o envia sozinho em toda requisição. O cookie é HttpOnly (o JavaScript não o
+ lê) e SameSite=Strict (não vai em requisições vindas de outros sites). O SameSite=Strict também é a
+ defesa do projeto contra CSRF, o ataque em que outro site tenta usar a sessão do administrador. Em
+ produção, costuma-se somar um token antiforgery; por simplicidade, o curso não o implementa.
+
+O que criar
+ Classe                                      O que faz
+
+ ResponseCodes                               Ganha NAO_AUTENTICADO = 4, ACESSO_NEGADO = 5 e
+                                             CREDENCIAIS_INVALIDAS = 6, com as mensagens da
+                                             Espec. 5.3.
+
+ AutenticacaoConfig (pasta                   Cookie retrogames.sessao: HttpOnly, SameSite=Strict,
+ Configuration)                              2 horas com renovação enquanto há uso. 401 e 403 no
+                                             envelope, sem redirecionar.
+
+ ClaimsPrincipalExtensions (pasta            Monta as claims a partir do usuário e lê o id do usuário
+ Extensions)                                 logado.
+
+ LoginRequestApiModel,                       E-mail e senha na entrada; id, nome, e-mail e perfil na
+ UsuarioLogadoResponseApiModel e             saída. Nunca o hash.
+ LoginRequestValidator
+
+ AutenticacaoController                      POST login, POST logout e GET eu, em
+                                             /api/Autenticacao.
+
+
+                                                                                         📖
+Passos
+  1.​ Acrescente os três códigos ao ResponseCodes e crie o AutenticacaoConfig.               Espec. 5.3 e 6, RS01
+  2.​ No Program.cs, registre a autenticação e coloque UseAuthentication() e UseAuthorization()
+      antes de MapControllers(), nessa ordem.
+
+      SignInAsync.    📖
+  3.​ Crie as classes da tabela. No login, credencial inválida responde 401 com o código 6; válida chama
+                           Espec. 5.2
+  4.​ Logout e eu recebem [Authorize]. Teste no Swagger: login, eu, logout e eu de novo.
+  5.​ Faça um commit.
+
+
+ ✔ Confira
+ ☐ Login correto responde 200 com os dados do usuário, e o navegador guarda o cookie
+ retrogames.sessao.
+ ☐ Senha errada responde 401 com código 6; e-mail mal formado, 400 com código 3.
+ ☐ GET /api/Autenticacao/eu sem login responde 401 com código 4, no envelope.
+ ☐ Nenhuma resposta traz o hash da senha.
+ Etapa 3 de 4 · Proteção da administração
+
+ Autenticar é saber quem é o usuário; autorizar é decidir o que ele pode fazer. A API fica segura por padrão:
+ toda rota exige login, exceto as liberadas de forma explícita. As rotas de gravação exigem ainda a política
+ SomenteAdministrador: sem login, 401; logado sem o perfil, 403. O Service também precisa saber quem
+ chama, para mostrar jogos inativos só ao administrador (RN04). Como o Service não conhece HTTP, ele
+ recebe uma interface, IUsuarioAtualService, e a WebApi a implementa lendo o cookie.
+
+O que criar
+ Classe                                      O que faz
+
+ Politicas e AutorizacaoConfig               A política padrão (FallbackPolicy), que exige login, e
+ (pasta Configuration)                       a SomenteAdministrador, que exige o perfil.
+
+ IUsuarioAtualService (Services)             Diz se há usuário logado, o id dele e se é administrador.
+
+ UsuarioAtualService (WebApi,                Implementa a interface lendo o usuário da requisição
+ pasta Services)                             (IHttpContextAccessor).
+
+ JogoService e                               incluirInativos só vale para o administrador; para os
+ ListarJogoRequestApiModel                   demais, jogo inativo dá 404.
+
+Quem acessa cada rota
+
+ Acesso                 Rotas                                       Como marcar
+
+ Público (sem login)    POST login; GET de plataformas,             [AllowAnonymous] na action (o
+                        gêneros, condições e jogos; Swagger         Swagger está no passo 1)
+
+ Usuário logado         POST logout e GET eu                        Nada: vale a política padrão
+
+ Administrador          POST, PUT e DELETE de plataformas e de      [Authorize(Policy =
+                        jogos                                       Politicas.Administrador)]
+
+
+Passos
+  1.​ Crie as duas políticas e registre-as no Program.cs. Nele, troque app.MapOpenApi(); por
+
+      definition".📖
+      app.MapOpenApi().AllowAnonymous();. Sem isso, o /swagger mostra "Failed to load API
+                       Espec. 6, RS03
+  2.​ Marque cada action conforme a tabela acima. O [Authorize] de logout e eu pode sair.
+
+  4.​ Aplique a RN04 no JogoService.     📖
+  3.​ Crie e registre as duas classes do usuário atual, com AddHttpContextAccessor().
+                                               Espec. 7, RN04. Teste no Swagger e faça um commit.
+
+
+ ✔ Confira
+ ☐ POST /api/Plataforma sem login responde 401 com código 4.
+ ☐ Login, GET do catálogo e Swagger funcionam sem login.
+ ☐ GET /api/Jogo?incluirInativos=true sem login só traz ativos; com o admin, também
+ inativos.
+☐ O JogoService não usa HttpContext: só a interface IUsuarioAtualService.
+ Etapa 4 de 4 · Todas as respostas de acesso
+
+ O acesso está completo. Antes do front-end, confira cada resposta da tabela, sempre a partir de uma janela
+ anônima do navegador, sem sessão. O 403 (código 5) só aparece para um usuário logado sem o perfil de
+ administrador; como esta versão não tem cadastro de clientes, ele fica para o módulo de Compras.
+
+Respostas a provocar no Swagger
+ Requisição                                                Status         responseCode
+
+ POST /api/Plataforma sem login                            401            4
+
+ POST login com senha errada                               401            6
+
+ POST login com e-mail mal formado                         400            3, com os campos em data
+
+ POST login do administrador                               200            0
+
+ POST /api/Plataforma logado como                          201            0
+ administrador
+
+ GET /api/Jogo?incluirInativos=true sem                    200            0, só jogos ativos
+ login
+
+ POST logout e depois GET eu                               200 e 401      0e4
+
+
+                                                                                📖
+Passos
+  1.​ Provoque cada resposta da tabela e confira o status e o responseCode.       Espec. 5.2, 5.3 e 6
+  2.​ Para cada resposta diferente do esperado, descubra se a causa está na configuração, na política, no
+      controller ou no Service.
+  3.​ Faça um commit e envie ao GitHub (git push).
+
+
+ ✔ Confira
+ ☐ Todas as linhas da tabela deram o resultado esperado.
+ ☐ Toda rota exige login, exceto as marcadas com [AllowAnonymous]; toda rota de gravação exige
+ o administrador.
+ ☐ Nenhuma senha está no repositório nem no log da API.
+ Antes de sair da aula
+
+
+ ✅ Checklist final
+ ☐ O repositório no GitHub tem tudo, com um commit por etapa.
+ ☐ A solução compila e a API sobe na porta 5080, com o Swagger.
+ ☐ O administrador inicial existe, com a senha guardada como hash.
+ ☐ Login, logout e eu funcionam, e a sessão fica num cookie HttpOnly.
+ ☐ Gravação só com login de administrador.
+ ☐ Inativos só aparecem para o administrador (RN04).
+ ☐ Nenhuma senha está no repositório.
+ ☐ Os cartões do quadro de tarefas estão atualizados.
+
+Se algum item não estiver marcado, volte à etapa correspondente. O que não ficar pronto em aula deve ser
+concluído antes da aula 7.
+
