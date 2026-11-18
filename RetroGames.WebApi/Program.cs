@@ -1,6 +1,10 @@
 
 using RetroGames.WebApi.Configuration;
 using RetroGames.WebApi.Middlewares;
+using FluentValidation;
+using RetroGames.WebApi.ActionFilters;
+using RetroGames.WebApi.ApiModels; // Ajuste ao namespace do ResponseCodes
+using Microsoft.AspNetCore.Mvc;
 
 // Carrega as variáveis do arquivo .env
 DotNetEnv.Env.TraversePath().Load();
@@ -21,7 +25,23 @@ builder.Services.AddRepositorios(connectionString);
 builder.Services.AddServicosDeNegocio();
 
 // Registra os controllers e o OpenAPI
-builder.Services.AddControllers();
+builder.Services.AddValidatorsFromAssemblyContaining<Program>();
+
+builder.Services.AddControllers(opcoes =>
+{
+    opcoes.Filters.Add<FluentValidationFilter>();
+})
+.ConfigureApiBehaviorOptions(opcoes =>
+{
+    opcoes.InvalidModelStateResponseFactory = contexto =>
+    {
+        return new BadRequestObjectResult(new
+        {
+            responseCode = ResponseCodes.MODEL_STATE_INVALIDO.Code,
+            errorMessage = ResponseCodes.MODEL_STATE_INVALIDO.DefaultMessage
+        });
+    };
+});
 builder.Services.AddOpenApi(options =>
 {
     options.OpenApiVersion =
