@@ -32,7 +32,6 @@ public class AutenticacaoController(IAutenticacaoService autenticacao) : Control
         return ResponderUsuario(principal);
     }
 
-    [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout()
     {
@@ -40,7 +39,6 @@ public class AutenticacaoController(IAutenticacaoService autenticacao) : Control
         return Ok(new RetroGamesResponseApiModel());
     }
 
-    [Authorize]
     [HttpGet("eu")]
     public IActionResult Eu()
     {

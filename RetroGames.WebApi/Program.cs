@@ -28,7 +28,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 builder.Services.AddRepositorios(connectionString);
 builder.Services.AddServicosDeNegocio();
 builder.Services.AddAutenticacao(builder.Environment.IsDevelopment());
-builder.Services.AddAuthorization();
+builder.Services.AddAutorizacao();
 
 // Registra os controllers e o OpenAPI
 builder.Services.AddValidatorsFromAssemblyContaining<Program>();
@@ -72,7 +72,7 @@ app.UseExceptionHandler();
 // Disponibiliza o Swagger apenas em desenvolvimento
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    app.MapOpenApi().AllowAnonymous();
 
     app.UseSwaggerUI(options =>
     {

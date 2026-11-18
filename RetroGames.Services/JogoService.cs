@@ -9,9 +9,12 @@ public class JogoService : IJogoService
 {
     private readonly IRepositorySet repositorio;
 
-    public JogoService(IRepositorySet repositorio)
+    private readonly IUsuarioAtualService usuarioAtual;
+
+    public JogoService(IRepositorySet repositorio, IUsuarioAtualService usuarioAtual)
     {
         this.repositorio = repositorio;
+        this.usuarioAtual = usuarioAtual;
     }
 
     // Lista os jogos com filtros e paginação
@@ -51,7 +54,7 @@ public class JogoService : IJogoService
             busca,
             idPlataforma,
             idsJogos,
-            incluirInativos,
+            incluirInativos && usuarioAtual.EhAdministrador,
             pagina,
             tamanhoPagina
         );
@@ -66,7 +69,7 @@ public class JogoService : IJogoService
     {
         var jogo = await repositorio.Jogo.BuscarPorIdAsync(id);
 
-        if (jogo is null)
+        if (jogo is null || (!jogo.Ativo && !usuarioAtual.EhAdministrador))
         {
             throw new BusinessRuleException(
                 BusinessErrors.JOGO_NAO_ENCONTRADO

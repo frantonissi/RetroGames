@@ -9,6 +9,8 @@ public class ListarJogoRequestApiModel
 
     public int? IdGenero { get; set; }
 
+    public bool IncluirInativos { get; set; }
+
     public int Pagina { get; set; } = 1;
 
     public int TamanhoPagina { get; set; } = 12;
